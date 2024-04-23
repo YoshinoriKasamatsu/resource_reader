@@ -1,5 +1,5 @@
-use std::fs::read;
-use std::path::Path;
+use std::{clone, fs::read};
+use std::path::{Path, PathBuf};
 
 use glob::glob;
 use serde::{Serialize, Deserialize};
@@ -30,9 +30,31 @@ struct Dialog {
 struct ResourceFile {
     path: String,
     lines: Vec<String>,
+    resource_blocks: Vec<ResourceBlock>,
     dialogs: Vec<Dialog>,
+}
 
-    
+// リソースブロック
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ResourceBlock {
+    resource_type: ResourceType,
+    lines: Vec<String>,
+}
+
+// リソースタイプの列挙型
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+enum ResourceType {
+    DIALOG,
+    MENU,
+    STRING,
+    ACCELERATORS,
+    CURSOR,
+    ICON,
+    BITMAP,
+    HTML,
+    MANIFEST,
+    VERSION,
+    UNKNOWN,
 }
 
 
@@ -43,7 +65,18 @@ fn main() {
     let rc_files = glob(sample_rc_path).unwrap();
 
     // リソースファイルの読み込み
-    let resource_files = read_resource_files(rc_files);
+    let mut resource_files = read_resource_files(rc_files);
+
+
+    // リソースファイルの解析
+    analyze_resources(&resource_files);
+
+    for resource_file in &resource_files {
+        for resource_block in &resource_file.resource_blocks {
+            println!("{:?}", resource_block);
+        }
+    }
+
 
     // ヘッダーファイルの読み込み
     let sample_rc_path = r"../example/app/**/*.h";
@@ -54,24 +87,95 @@ fn main() {
     // コード解析
 }
 
+fn analyze_resources(resource_files: &Vec<ResourceFile>) {
+
+    for let mut index = 0 ; index < resource_files.len() ; index++ {
+        let resource_file = &mut resource_files[index];
+        let resource_line = resource_file.lines.clone();
+        let mut resource_type = ResourceType::UNKNOWN;
+        let mut resource_block: ResourceBlock = ResourceBlock{
+            resource_type: ResourceType::UNKNOWN,
+            lines: Vec::new(),
+        };
+        for line in resource_line {
+            // DIALOGの検出
+            if line.contains(" DIALOG") {
+                resource_type = ResourceType::DIALOG;
+                resource_block.resource_type = ResourceType::DIALOG;
+            }
+            // STRINGTABLEの検出
+            if line.contains("STRINGTABLE") {
+                resource_type = ResourceType::STRING;
+            }
+
+            // リソースブロックの追加
+            if resource_type != ResourceType::UNKNOWN {
+                resource_block.lines.push(line.clone());
+            }
+
+            // END検出でリソースタイプをUNKNOWNに戻す
+            if line.contains("END") {
+                
+                &resource_file.resource_blocks.push(resource_block.clone());
+                resource_type = ResourceType::UNKNOWN;
+            }
+        }
+    }
+
+
+
+    for resource_file in resource_files {
+        let mut resource_file: &mut ResourceFile = resource_file;
+
+        let resource_line = resource_file.lines.clone();
+
+        
+
+        println!("path: {}", resource_file.path);
+        let mut resource_type = ResourceType::UNKNOWN;
+        let mut resource_block: ResourceBlock = ResourceBlock{
+            resource_type: ResourceType::UNKNOWN,
+            lines: Vec::new(),
+        };
+        for line in resource_line {
+            // DIALOGの検出
+            if line.contains(" DIALOG") {
+                resource_type = ResourceType::DIALOG;
+                resource_block.resource_type = ResourceType::DIALOG;
+            }
+            // STRINGTABLEの検出
+            if line.contains("STRINGTABLE") {
+                resource_type = ResourceType::STRING;
+            }
+
+            // リソースブロックの追加
+            if resource_type != ResourceType::UNKNOWN {
+                resource_block.lines.push(line.clone());
+            }
+
+            // END検出でリソースタイプをUNKNOWNに戻す
+            if line.contains("END") {
+                
+                &resource_file.resource_blocks.push(resource_block.clone());
+                resource_type = ResourceType::UNKNOWN;
+            }
+
+
+
+            println!("{}", line);
+        }
+    }
+}
+
 fn read_resource_files(rc_files: glob::Paths) -> Vec<ResourceFile> {
     let mut resource_files = Vec::new();
     
     // リソースファイルの列挙
     for rc_file in rc_files {
         // ファイルのパスを取得
-        let rc_file = rc_file.ok();
+        let rc_file: Option<std::path::PathBuf> = rc_file.ok();
         let rc_file_path = rc_file.as_ref().unwrap();
-    
-        // ファイルをUTF16で開く
-        let path = Path::new(rc_file_path);
-        let contents = read(path).expect("Failed to read file");
-        let mut wchars = Vec::new();
-        for i in 0..contents.len() / 2 {
-            let c = u16::from_le_bytes([contents[i * 2], contents[i * 2 + 1]]);
-            wchars.push(c);
-        }
-        let utf16_text = String::from_utf16(&wchars).unwrap();
+        let utf16_text = read_utf16_file(rc_file_path);
         // \r\nを\nに変換、\rを\nに変換
         let rc_text = utf16_text.replace("\r\n", "\n").replace("\r", "\n");
         // \nで分割
@@ -80,10 +184,23 @@ fn read_resource_files(rc_files: glob::Paths) -> Vec<ResourceFile> {
         let resource_file = ResourceFile{
             path: rc_file_path.to_str().unwrap().to_string(),
             lines: rc_lines.map(|s| s.to_string()).collect(),
+            resource_blocks: Vec::new(),
             dialogs: Vec::new(),
-            
         };
         resource_files.push(resource_file);
     }
     resource_files
     }
+
+fn read_utf16_file(rc_file_path: &PathBuf) -> String {
+    // ファイルをUTF16で開く
+    let path = Path::new(rc_file_path);
+    let contents = read(path).expect("Failed to read file");
+    let mut wchars = Vec::new();
+    for i in 0..contents.len() / 2 {
+        let c = u16::from_le_bytes([contents[i * 2], contents[i * 2 + 1]]);
+        wchars.push(c);
+    }
+    let utf16_text = String::from_utf16(&wchars).unwrap();
+    utf16_text
+}
