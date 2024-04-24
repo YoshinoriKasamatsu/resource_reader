@@ -32,6 +32,7 @@ struct ResourceFile {
     lines: Vec<String>,
     resource_blocks: Vec<ResourceBlock>,
     dialogs: Vec<Dialog>,
+    string_tables: Vec<String>,
 }
 
 // リソースブロック
@@ -67,11 +68,11 @@ fn main() {
     // リソースファイルの読み込み
     let mut resource_files = read_resource_files(rc_files);
 
-    for resource_file in &resource_files {
-        for resource_block in &resource_file.resource_blocks {
-            println!("{:?}", resource_block);
-        }
-    }
+    // for resource_file in &resource_files {
+    //     for resource_block in &resource_file.resource_blocks {
+    //         println!("{:?}", resource_block);
+    //     }
+    // }
 
 
     // ヘッダーファイルの読み込み
@@ -103,53 +104,72 @@ fn read_resource_files(rc_files: glob::Paths) -> Vec<ResourceFile> {
 
         // リソースブロック作成
 
-        // let mut dialogs = Vec::new();
-        // let mut string_tables = Vec::new();
-        let mut resource_blocks = Vec::new();
-        let mut resource_type = ResourceType::UNKNOWN;
-        let mut resource_block: ResourceBlock = ResourceBlock{
-            resource_type: ResourceType::UNKNOWN,
-            lines: Vec::new(),
-        };
-
         let lines = rc_lines.clone();
+        let resource_blocks = create_resource_blocks(rc_lines);
 
-        for line in rc_lines {
-            // DIALOGの検出
-            if line.contains(" DIALOG") {
-                resource_type = ResourceType::DIALOG;
-                resource_block.resource_type = ResourceType::DIALOG;
+        // STRINGTABLESの作成
+        let mut string_tables = Vec::new();
+        for resource_block in &resource_blocks {
+            if resource_block.resource_type == ResourceType::STRING {
+                for line in &resource_block.lines {
+                    println!("{}", line);
+                    string_tables.push(String::from(line));
+                }
             }
-            // STRINGTABLEの検出
-            if line.contains("STRINGTABLE") {
-                resource_type = ResourceType::STRING;
-            }
-
-            // リソースブロックの追加
-            if resource_type != ResourceType::UNKNOWN {
-                resource_block.lines.push(String::from(line.clone()));
-            }
-
-            // END検出でリソースタイプをUNKNOWNに戻す
-            if line.contains("END") {
-                resource_blocks.push(resource_block.clone());
-                resource_type = ResourceType::UNKNOWN;
-            }
-            println!("{}", line);
         }
-
-
     
         let resource_file = ResourceFile{
             path: rc_file_path.to_str().unwrap().to_string(),
             lines: lines.map(|s| s.to_string()).collect(),
             resource_blocks: resource_blocks,
             dialogs: Vec::new(),
+            string_tables: string_tables,
         };
+
         resource_files.push(resource_file);
     }
     resource_files
     }
+
+fn create_resource_blocks(rc_lines: std::str::Split<'_, &str>) -> Vec<ResourceBlock>{
+    let mut resource_blocks = Vec::new();
+    let mut resource_type = ResourceType::UNKNOWN;
+    let mut resource_block: ResourceBlock = ResourceBlock{
+        resource_type: ResourceType::UNKNOWN,
+        lines: Vec::new(),
+    };
+    for line in rc_lines {
+        // DIALOGの検出
+        if line.contains(" DIALOG") {
+            resource_type = ResourceType::DIALOG;
+            resource_block.resource_type = ResourceType::DIALOG;
+        }
+        // STRINGTABLEの検出
+        if line.contains("STRINGTABLE") {
+            resource_type = ResourceType::STRING;
+            resource_block.resource_type = ResourceType::STRING;
+            continue;
+        }
+
+        if line.contains("BEGIN") {
+            continue;
+        }        
+
+        // END検出でリソースタイプをUNKNOWNに戻す
+        if line.contains("END") {
+            resource_blocks.push(resource_block.clone());
+            resource_type = ResourceType::UNKNOWN;
+        }
+
+        // リソースブロックの追加
+        if resource_type != ResourceType::UNKNOWN {
+            resource_block.lines.push(String::from(line));
+        }
+
+
+    }
+    resource_blocks
+}
 
 fn read_utf16_file(rc_file_path: &PathBuf) -> String {
     // ファイルをUTF16で開く
