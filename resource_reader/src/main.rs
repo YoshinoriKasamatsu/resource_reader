@@ -67,10 +67,6 @@ fn main() {
     // リソースファイルの読み込み
     let mut resource_files = read_resource_files(rc_files);
 
-
-    // リソースファイルの解析
-    analyze_resources(&resource_files);
-
     for resource_file in &resource_files {
         for resource_block in &resource_file.resource_blocks {
             println!("{:?}", resource_block);
@@ -87,91 +83,15 @@ fn main() {
     // コード解析
 }
 
-fn analyze_resources(resource_files: &Vec<ResourceFile>) {
-
-    for let mut index = 0 ; index < resource_files.len() ; index++ {
-        let resource_file = &mut resource_files[index];
-        let resource_line = resource_file.lines.clone();
-        let mut resource_type = ResourceType::UNKNOWN;
-        let mut resource_block: ResourceBlock = ResourceBlock{
-            resource_type: ResourceType::UNKNOWN,
-            lines: Vec::new(),
-        };
-        for line in resource_line {
-            // DIALOGの検出
-            if line.contains(" DIALOG") {
-                resource_type = ResourceType::DIALOG;
-                resource_block.resource_type = ResourceType::DIALOG;
-            }
-            // STRINGTABLEの検出
-            if line.contains("STRINGTABLE") {
-                resource_type = ResourceType::STRING;
-            }
-
-            // リソースブロックの追加
-            if resource_type != ResourceType::UNKNOWN {
-                resource_block.lines.push(line.clone());
-            }
-
-            // END検出でリソースタイプをUNKNOWNに戻す
-            if line.contains("END") {
-                
-                &resource_file.resource_blocks.push(resource_block.clone());
-                resource_type = ResourceType::UNKNOWN;
-            }
-        }
-    }
-
-
-
-    for resource_file in resource_files {
-        let mut resource_file: &mut ResourceFile = resource_file;
-
-        let resource_line = resource_file.lines.clone();
-
-        
-
-        println!("path: {}", resource_file.path);
-        let mut resource_type = ResourceType::UNKNOWN;
-        let mut resource_block: ResourceBlock = ResourceBlock{
-            resource_type: ResourceType::UNKNOWN,
-            lines: Vec::new(),
-        };
-        for line in resource_line {
-            // DIALOGの検出
-            if line.contains(" DIALOG") {
-                resource_type = ResourceType::DIALOG;
-                resource_block.resource_type = ResourceType::DIALOG;
-            }
-            // STRINGTABLEの検出
-            if line.contains("STRINGTABLE") {
-                resource_type = ResourceType::STRING;
-            }
-
-            // リソースブロックの追加
-            if resource_type != ResourceType::UNKNOWN {
-                resource_block.lines.push(line.clone());
-            }
-
-            // END検出でリソースタイプをUNKNOWNに戻す
-            if line.contains("END") {
-                
-                &resource_file.resource_blocks.push(resource_block.clone());
-                resource_type = ResourceType::UNKNOWN;
-            }
-
-
-
-            println!("{}", line);
-        }
-    }
-}
 
 fn read_resource_files(rc_files: glob::Paths) -> Vec<ResourceFile> {
     let mut resource_files = Vec::new();
     
     // リソースファイルの列挙
     for rc_file in rc_files {
+
+        // ファイル読み込み
+
         // ファイルのパスを取得
         let rc_file: Option<std::path::PathBuf> = rc_file.ok();
         let rc_file_path = rc_file.as_ref().unwrap();
@@ -180,11 +100,50 @@ fn read_resource_files(rc_files: glob::Paths) -> Vec<ResourceFile> {
         let rc_text = utf16_text.replace("\r\n", "\n").replace("\r", "\n");
         // \nで分割
         let rc_lines = rc_text.split("\n");
+
+        // リソースブロック作成
+
+        // let mut dialogs = Vec::new();
+        // let mut string_tables = Vec::new();
+        let mut resource_blocks = Vec::new();
+        let mut resource_type = ResourceType::UNKNOWN;
+        let mut resource_block: ResourceBlock = ResourceBlock{
+            resource_type: ResourceType::UNKNOWN,
+            lines: Vec::new(),
+        };
+
+        let lines = rc_lines.clone();
+
+        for line in rc_lines {
+            // DIALOGの検出
+            if line.contains(" DIALOG") {
+                resource_type = ResourceType::DIALOG;
+                resource_block.resource_type = ResourceType::DIALOG;
+            }
+            // STRINGTABLEの検出
+            if line.contains("STRINGTABLE") {
+                resource_type = ResourceType::STRING;
+            }
+
+            // リソースブロックの追加
+            if resource_type != ResourceType::UNKNOWN {
+                resource_block.lines.push(String::from(line.clone()));
+            }
+
+            // END検出でリソースタイプをUNKNOWNに戻す
+            if line.contains("END") {
+                resource_blocks.push(resource_block.clone());
+                resource_type = ResourceType::UNKNOWN;
+            }
+            println!("{}", line);
+        }
+
+
     
         let resource_file = ResourceFile{
             path: rc_file_path.to_str().unwrap().to_string(),
-            lines: rc_lines.map(|s| s.to_string()).collect(),
-            resource_blocks: Vec::new(),
+            lines: lines.map(|s| s.to_string()).collect(),
+            resource_blocks: resource_blocks,
             dialogs: Vec::new(),
         };
         resource_files.push(resource_file);
